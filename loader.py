@@ -238,8 +238,7 @@ def convert_skill_ids(army_df: DataFramePlus, skills_df: pd.DataFrame, extras_df
     id_to_skill = partial(id_to_name, lookup=skills_df, extras_lookup=extras_df)
     army_df['skills'] = army_df.apply(lambda row: id_to_skill(row['skills_id']), axis=1) + \
         army_df.apply(lambda row: id_to_skill(row['option_skills_id']), axis=1)
-    
-    # To do: handle modifiers (Mimetism(-X) etc)
+
     return army_df
 
 def set_attribute_column_types(army_df: DataFramePlus) -> DataFramePlus:
@@ -281,9 +280,25 @@ def convert_columns_to_type(df: DataFramePlus, columns: List[str], type: str) ->
     for col in columns:
         df[col] = df[col].astype(type)
     return df
+
+def get_orders_of_type(orders_list: List[Dict], order_type: str) -> int:
+    count = sum([order['total'] for order in orders_list if order['type']==order_type])
+    #print(order_type + ' orders in ' + str(orders_list) + ' totalled to: ' + str(count))
+    return count
+
+def add_order_columns(df: DataFramePlus) -> DataFramePlus:    
+    #df[['Regular Orders', 'Irregular Orders', 'Impetious Orders', 'Lieutenant Orders']] = df.apply( 
+    #    lambda row: [get_orders_of_type(row['orders'], order_type) for order_type in ['REGULAR', 'IRREGULAR', 'IMPETUOUS', 'LIEUTENANT']], axis=1)
+    order_cols = [df.apply(lambda row: get_orders_of_type(row['orders'], order_type), axis=1) for order_type in ['REGULAR', 'IRREGULAR', 'IMPETUOUS', 'LIEUTENANT']]
+    df['Regular Orders'] = order_cols[0]
+    df['Irregular Orders'] = order_cols[1]
+    df['Impetuous Orders'] = order_cols[2]
+    df['Lieutenant Orders'] = order_cols[3]
+    return df
     
 def load_army_data_to_dataframes(army_data: Dict, weapons_df: DataFramePlus, skills_df: DataFramePlus, equipment_df: DataFramePlus) -> DataFramePlus:
     pd.options.display.max_colwidth = 200
+    pd.set_option('display.max_columns', None)
     army_df = DataFramePlus(army_data['units'])
     extras_df = DataFramePlus(army_data['filters']['extras'])
     
@@ -312,23 +327,36 @@ def load_army_data_to_dataframes(army_data: Dict, weapons_df: DataFramePlus, ski
     army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupOptions', key='equip', new_column='option_equipment')     
     army_df = army_df.explode('profileGroupProfiles', ignore_index=True)
     army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupProfiles', key='skills')
-    for key in ['skills', 'arm', 'ava', 'bs', 'bts', 'cc', 'move', 'ph', 's', 'str', 'w', 'wip', 'equip', 'weapons', 'peripheral', 'type']:
-        army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupProfiles', key=key)    
+    for key in ['skills', 'arm', 'ava', 'bs', 'bts', 'cc', 'move', 'ph', 's', 'str', 'w', 'wip', 'equip', 'weapons', 'peripheral', 'type', 'chars']:
+        army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupProfiles', key=key)
     
     army_df = convert_skill_ids(army_df, skills_df, extras_df)
     army_df = convert_weapon_ids(army_df, weapons_df, extras_df)
     army_df = convert_equipment_ids(army_df, equipment_df, extras_df)
     army_df = set_attribute_column_types(army_df)
     army_df = convert_type_ids(army_df)
+    army_df = add_order_columns(army_df)
     
     
-    army_df = army_df.drop(['id', 'idArmy', 'canonical', 'isc', 'iscAbbr', 'profileGroups', 'options', 'slug', 'filters', 'notes', 'profileGroupOptions', 'profileGroupProfiles', 'option_skills_id', 'option_weapons_id', 'skills_id', 'weapons_id', 'equip_id', 'option_equipment_id', 'option_peripheral', 'peripheral'], axis=1)
+    army_df = army_df.drop(['id', 'idArmy', 'canonical', 'isc', 'iscAbbr', 'profileGroups', 'options', 'slug', 'filters', 'notes', 'profileGroupOptions', 'profileGroupProfiles', 'option_skills_id', 'option_weapons_id', 'skills_id', 'weapons_id', 'equip_id', 'option_equipment_id', 'option_peripheral', 'peripheral'], axis=1)    
     army_df[army_df["name"].isna()] = ''
     army_df = army_df[army_df['name']!='']
     army_df = convert_columns_to_type(army_df, ['arm', 'w', 'ava', 'bs', 'bts', 'cc', 'ph', 'points', 'wip'], 'int32')    
     army_df.loc[army_df['swc'] == '-', 'swc'] = '0'
     army_df = convert_columns_to_type(army_df, ['swc'], 'float')
-    army_df = army_df[['name', 'type', 'move', 'cc', 'bs', 'ph', 'wip', 'arm', 'bts', 'w', 'str', 's', 'ava', 'skills', 'equipment', 'weapons', 'swc', 'points', 'orders']]
+    army_df = army_df[[
+        'name', 
+        'type', 
+        'move', 
+        'cc', 'bs', 'ph', 'wip', 'arm', 'bts', 'w', 'str', 's', 'ava', 
+        'skills', 
+        'equipment', 
+        'weapons',
+        'swc', 'points', 
+        'Regular Orders', 'Irregular Orders', 'Impetuous Orders', 'Lieutenant Orders']]
+
+
+    
     return DataFramePlus(army_df)
 
 
