@@ -263,6 +263,20 @@ def convert_equipment_ids(army_df: DataFramePlus, equipment_df: DataFramePlus, e
         army_df.apply(lambda row: id_to_equipment(row['option_equipment_id']), axis=1)
     return army_df
 
+def convert_type_ids(army_df: DataFramePlus) -> DataFramePlus:
+    army_df.rename(columns={'type':'type_id'}, inplace=True)
+    type_id_to_name = {
+        1: 'LI',
+        2: 'MI',
+        3: 'HI',
+        4: 'TAG',
+        5: 'REM',
+        6: 'SK',
+        7: 'WB',
+    }
+    army_df['type'] = army_df.apply(lambda row: type_id_to_name[row['type_id']], axis=1)
+    return army_df
+
 def convert_columns_to_type(df: DataFramePlus, columns: List[str], type: str) -> DataFramePlus:
     for col in columns:
         df[col] = df[col].astype(type)
@@ -298,13 +312,14 @@ def load_army_data_to_dataframes(army_data: Dict, weapons_df: DataFramePlus, ski
     army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupOptions', key='equip', new_column='option_equipment')     
     army_df = army_df.explode('profileGroupProfiles', ignore_index=True)
     army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupProfiles', key='skills')
-    for key in ['skills', 'arm', 'ava', 'bs', 'bts', 'cc', 'move', 'ph', 's', 'str', 'w', 'wip', 'equip', 'weapons', 'peripheral']:
+    for key in ['skills', 'arm', 'ava', 'bs', 'bts', 'cc', 'move', 'ph', 's', 'str', 'w', 'wip', 'equip', 'weapons', 'peripheral', 'type']:
         army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupProfiles', key=key)    
     
     army_df = convert_skill_ids(army_df, skills_df, extras_df)
     army_df = convert_weapon_ids(army_df, weapons_df, extras_df)
     army_df = convert_equipment_ids(army_df, equipment_df, extras_df)
     army_df = set_attribute_column_types(army_df)
+    army_df = convert_type_ids(army_df)
     
     
     army_df = army_df.drop(['id', 'idArmy', 'canonical', 'isc', 'iscAbbr', 'profileGroups', 'options', 'slug', 'filters', 'notes', 'profileGroupOptions', 'profileGroupProfiles', 'option_skills_id', 'option_weapons_id', 'skills_id', 'weapons_id', 'equip_id', 'option_equipment_id', 'option_peripheral', 'peripheral'], axis=1)
@@ -313,5 +328,29 @@ def load_army_data_to_dataframes(army_data: Dict, weapons_df: DataFramePlus, ski
     army_df = convert_columns_to_type(army_df, ['arm', 'w', 'ava', 'bs', 'bts', 'cc', 'ph', 'points', 'wip'], 'int32')    
     army_df.loc[army_df['swc'] == '-', 'swc'] = '0'
     army_df = convert_columns_to_type(army_df, ['swc'], 'float')
-    army_df = army_df[['name', 'move', 'cc', 'bs', 'ph', 'wip', 'arm', 'bts', 'w', 'str', 's', 'ava', 'skills', 'equipment', 'weapons', 'swc', 'points', 'orders']]
+    army_df = army_df[['name', 'type', 'move', 'cc', 'bs', 'ph', 'wip', 'arm', 'bts', 'w', 'str', 's', 'ava', 'skills', 'equipment', 'weapons', 'swc', 'points', 'orders']]
     return DataFramePlus(army_df)
+
+
+
+
+# Notes:
+# category = 1 -> Garrison troops
+# category = 2 -> Line troops
+# category = 3 -> Specially Trained Troops
+# category = 4 -> Veteran Troops
+# category = 5 -> Elite troops
+# category = 6 -> Headquarters troops
+# category = 7 -> Mechanized troops
+# category = 8 -> Support troops
+# 
+# category = 10 -> Character
+# category = 11 -> Mercenary
+
+# type = 1 -> Light Infantry
+# type = 2 -> Medium Infantry
+# type = 3 -> Heavy Infantry
+# type = 4 -> TAG
+# type = 5 -> REM
+# type = 6 -> Skirmishers
+# type = 7 -> Warbands
