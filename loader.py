@@ -6,6 +6,8 @@ from functools import partial
 import urllib.request as request
 import shutil
 import time
+from unidecode import unidecode
+
 
 ###############################################################################
 #   User guide:
@@ -35,9 +37,11 @@ import time
 class DataFramePlus(pd.DataFrame):
     def __init__(self, *args):
         super(DataFramePlus, self).__init__(*args)
+
     
     def has(self, column, value):
-        return self.apply(lambda x: value in x[column], axis=1)
+        _value = unidecode(value.lower())
+        return self.apply(lambda x: _value in [unidecode(y.lower()) for y in x[column]], axis=1)
     
     def has_weapon(self, value):
         return self.has('weapons', value)
@@ -47,14 +51,26 @@ class DataFramePlus(pd.DataFrame):
     
     def has_equipment(self, value):
         return self.has('equipment', value)
+    
+    def has_name(self, value):
+        _value = unidecode(value.lower())
+        return self.apply(lambda x: _value in unidecode(x['name'].lower()), axis=1)
+    
+    def sort(self):
+        return self.sort_values(['points', 'swc', 'ava'])
+    
+    wp = has_weapon
+    sk = has_skill
+    eq = has_equipment
+    nm = has_name
 
 #################################################################################################
 #                                            File download
 #################################################################################################
-def get_army_file_list() -> Dict:
+def get_army_names() -> Dict:
     file_dict = get_file_list()
     file_dict.pop('metadata')
-    return file_dict
+    return list(file_dict.keys())
 
 def get_file_list() -> Dict:
     return {
@@ -147,7 +163,7 @@ def download_armies(armies: Union[str, List[str]]):
 #####################################################################################################
 #                                            File Handling
 #####################################################################################################
-def load_all_downloaded_files():
+def load_downloaded_files(load_filter=None):
     time_start = time.time()
     folder = verify_file_folder()
     files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
@@ -158,20 +174,23 @@ def load_all_downloaded_files():
             loaded_jsons[var_name] = json.load(f)
     if 'metadata' not in loaded_jsons.keys():
         print("To load data, you must have the metadata file")
-        return    
+        return
     metadata_df = load_metadata_to_dataframes(loaded_jsons['metadata'])
     loaded_jsons.pop('metadata')
     armies = {}
     for army_key in loaded_jsons.keys():
-        print('Loading army: ' + army_key)
-        armies[army_key] = load_army_data_to_dataframes(
-            loaded_jsons[army_key], 
-            metadata_df['weapons'],
-            metadata_df['skills'],
-            metadata_df['equipment'])
+        if not load_filter or army_key in load_filter:
+            print('Loading army: ' + army_key)
+            armies[army_key] = load_army_data_to_dataframes(
+                loaded_jsons[army_key], 
+                metadata_df['weapons'],
+                metadata_df['skills'],
+                metadata_df['equipment'])
+        else:
+            print("Skipping army " + army_key)
     
     diff_time = time.time() - time_start
-    print("Time to load all armies: ")
+    print("Time to load armies: ")
     print(diff_time)
     return armies     
     
