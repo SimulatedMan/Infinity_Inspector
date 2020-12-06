@@ -1,8 +1,8 @@
 import pandas as pd
+import os
 from typing import Dict, List, Optional, Union, Iterable
 import json
 from functools import partial
-import os
 import urllib.request as request
 import shutil
 import time
@@ -51,6 +51,11 @@ class DataFramePlus(pd.DataFrame):
 #################################################################################################
 #                                            File download
 #################################################################################################
+def get_army_file_list() -> Dict:
+    file_dict = get_file_list()
+    file_dict.pop('metadata')
+    return file_dict
+
 def get_file_list() -> Dict:
     return {
         'metadata':'https://api.corvusbelli.com/army/infinity/en/metadata',
@@ -143,6 +148,7 @@ def download_armies(armies: Union[str, List[str]]):
 #                                            File Handling
 #####################################################################################################
 def load_all_downloaded_files():
+    time_start = time.time()
     folder = verify_file_folder()
     files = [f for f in os.listdir(folder) if os.path.isfile(os.path.join(folder, f))]
     loaded_jsons = {}
@@ -164,6 +170,9 @@ def load_all_downloaded_files():
             metadata_df['skills'],
             metadata_df['equipment'])
     
+    diff_time = time.time() - time_start
+    print("Time to load all armies: ")
+    print(diff_time)
     return armies     
     
             
@@ -227,7 +236,11 @@ def id_to_name(id_list, lookup, extras_lookup):
                 extras = ['(' + extra + ')' for extra in extras]
             else:
                 extras = []
-            full_names.append(name[0] + ''.join(extras))
+            if len(name) > 0:
+                full_names.append(name[0] + ''.join(extras))
+            else:
+                print('Missing name for ' + str(id) + '. Extras is: ' + str(extras))
+                full_names.append('Id_has_no_name' + ''.join(extras))
     return full_names    
 
 
@@ -241,7 +254,16 @@ def convert_skill_ids(army_df: DataFramePlus, skills_df: pd.DataFrame, extras_df
 
     return army_df
 
-def set_attribute_column_types(army_df: DataFramePlus) -> DataFramePlus:
+def set_column_types(army_df: DataFramePlus) -> DataFramePlus:
+    army_df = convert_columns_to_type(army_df, [
+        'arm', 'w', 'ava', 
+        'bs', 'bts', 'cc', 
+        'ph', 'points', 'wip', 
+        'Regular Orders', 'Irregular Orders', 'Impetuous Orders', 
+        'Lieutenant Orders'], 'int32')
+    army_df = convert_columns_to_type(army_df, ['swc'], 'float')
+    army_df = convert_columns_to_type(army_df, ['str'], 'bool')
+    army_df = convert_columns_to_type(army_df, ['name','type', 'move'], 'string')
     return army_df
 
 def convert_weapon_ids(army_df: DataFramePlus, weapons_df: DataFramePlus, extras_df: DataFramePlus) -> DataFramePlus:
@@ -299,6 +321,7 @@ def add_order_columns(df: DataFramePlus) -> DataFramePlus:
 def load_army_data_to_dataframes(army_data: Dict, weapons_df: DataFramePlus, skills_df: DataFramePlus, equipment_df: DataFramePlus) -> DataFramePlus:
     pd.options.display.max_colwidth = 200
     pd.set_option('display.max_columns', None)
+    pd.set_option('display.max_rows', 500)
     army_df = DataFramePlus(army_data['units'])
     extras_df = DataFramePlus(army_data['filters']['extras'])
     
@@ -321,29 +344,40 @@ def load_army_data_to_dataframes(army_data: Dict, weapons_df: DataFramePlus, ski
     army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupOptions', key='swc')
     # Extract extra skills that belong to the profile. These will be added to the main skill list later
     army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupOptions', key='skills', new_column='option_skills')
-    army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupOptions', key='orders') # Todo: Reformat into something more easy to parse
+    army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupOptions', key='orders')
     army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupOptions', key='peripheral', new_column='option_peripheral')
     army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupOptions', key='weapons', new_column='option_weapons')
     army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupOptions', key='equip', new_column='option_equipment')     
     army_df = army_df.explode('profileGroupProfiles', ignore_index=True)
     army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupProfiles', key='skills')
-    for key in ['skills', 'arm', 'ava', 'bs', 'bts', 'cc', 'move', 'ph', 's', 'str', 'w', 'wip', 'equip', 'weapons', 'peripheral', 'type', 'chars']:
+    profileGroupProfiles_key_list = [
+        'skills', 'arm', 'ava', 
+        'bs', 'bts', 'cc', 
+        'move', 'ph', 's', 
+        'str', 'w', 'wip', 
+        'equip', 'weapons', 'peripheral', 
+        'type', 'chars']
+    for key in profileGroupProfiles_key_list:
         army_df = add_column_from_dict_value(source_df=army_df, column='profileGroupProfiles', key=key)
     
     army_df = convert_skill_ids(army_df, skills_df, extras_df)
     army_df = convert_weapon_ids(army_df, weapons_df, extras_df)
     army_df = convert_equipment_ids(army_df, equipment_df, extras_df)
-    army_df = set_attribute_column_types(army_df)
     army_df = convert_type_ids(army_df)
     army_df = add_order_columns(army_df)
-    
-    
-    army_df = army_df.drop(['id', 'idArmy', 'canonical', 'isc', 'iscAbbr', 'profileGroups', 'options', 'slug', 'filters', 'notes', 'profileGroupOptions', 'profileGroupProfiles', 'option_skills_id', 'option_weapons_id', 'skills_id', 'weapons_id', 'equip_id', 'option_equipment_id', 'option_peripheral', 'peripheral'], axis=1)    
+ 
+    army_df = army_df.drop([
+        'id', 'idArmy', 'canonical', 
+        'isc', 'iscAbbr', 'profileGroups', 
+        'options', 'slug', 'filters', 
+        'notes', 'profileGroupOptions', 'profileGroupProfiles', 
+        'option_skills_id', 'option_weapons_id', 'skills_id', 
+        'weapons_id', 'equip_id', 'option_equipment_id', 
+        'option_peripheral', 'peripheral'], axis=1)    
     army_df[army_df["name"].isna()] = ''
     army_df = army_df[army_df['name']!='']
-    army_df = convert_columns_to_type(army_df, ['arm', 'w', 'ava', 'bs', 'bts', 'cc', 'ph', 'points', 'wip'], 'int32')    
     army_df.loc[army_df['swc'] == '-', 'swc'] = '0'
-    army_df = convert_columns_to_type(army_df, ['swc'], 'float')
+    army_df = set_column_types(army_df)
     army_df = army_df[[
         'name', 
         'type', 
@@ -354,8 +388,6 @@ def load_army_data_to_dataframes(army_data: Dict, weapons_df: DataFramePlus, ski
         'weapons',
         'swc', 'points', 
         'Regular Orders', 'Irregular Orders', 'Impetuous Orders', 'Lieutenant Orders']]
-
-
     
     return DataFramePlus(army_df)
 
