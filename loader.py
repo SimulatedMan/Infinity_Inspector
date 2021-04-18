@@ -355,6 +355,7 @@ def load_army_data_to_dataframes(army_data: Dict, weapons_df: DataFramePlus, ski
     
     army_df = add_column_from_dict_value(source_df=army_df, column='profileGroups', key='options', new_column='profileGroupOptions')
     army_df = add_column_from_dict_value(source_df=army_df, column='profileGroups', key='profiles', new_column='profileGroupProfiles')
+    army_df = add_column_from_dict_value(source_df=army_df, column='profileGroups', key='isc', new_column='isc_name')
     
     # Handle options
     army_df = army_df.explode('profileGroupOptions', ignore_index=True)
@@ -398,7 +399,8 @@ def load_army_data_to_dataframes(army_data: Dict, weapons_df: DataFramePlus, ski
     army_df.loc[army_df['swc'] == '-', 'swc'] = '0'
     army_df = set_column_types(army_df)
     army_df = army_df[[
-        'name', 
+        'name',
+        'isc_name',
         'type', 
         'move', 
         'cc', 'bs', 'ph', 'wip', 'arm', 'bts', 'w', 'str', 's', 'ava', 
